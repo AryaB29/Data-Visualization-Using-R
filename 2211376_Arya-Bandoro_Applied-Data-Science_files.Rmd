@@ -1,0 +1,355 @@
+---
+title: "MA304_Arya Bandoro"
+author: "Arya Bandoro"
+date: "2023-02-16"
+output: html_document
+---
+
+# Project objective {.tabset}
+The objective of the project is to analyze the policing data, the data was taken from kaggle open dataset
+
+source of the data : https://www.kaggle.com/center-for-policing-equity/data-science-for-good.
+
+This report contain several section and each section have their own subsection, for the subsection, the report are ordered by the number of their subsection, each subsection are connected each other, this report also containing the conclusion and several recommendation that can be given to stakeholders (in this case are dallas police department) to improve their services to the society. 
+
+## Load Libraries
+
+
+Before we do analysis, there are several libraries needed for further analysis, which can be loaded by
+```{r message=FALSE, warning=FALSE,include=TRUE}
+#including several libraries needed
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(lubridate)
+library(tidyverse)
+library(sf)
+library(mapview)
+library(stringr)
+library(reshape2)
+
+```
+
+
+## Data loading
+
+Before we start the project we need to load the data first, we can do that using the command
+
+```{r}
+setwd('/Volumes/HP v212w/Kuliah/Data Visualization') # this to make the working dirrectory
+##we can load our data using this command
+data <- read.csv('Data.csv',header = TRUE)
+##we need to drop our first row (because it contains the column name)
+data_fix <- data[2:2384,]
+## we need further understanding with our data we need to see our data structure
+str(data_fix)
+## after that we need to further understanding about our column names
+names(data_fix)
+```
+findings from here : All of our data are character.
+
+
+## Data Cleansing
+We need to convert several columns in our data set into numeric, to do that, we can use this command
+```{r}
+## we need to change several data into integer and string data
+data_fix$OFFICER_YEARS_ON_FORCE <- as.numeric(data_fix$OFFICER_YEARS_ON_FORCE)
+## we can recheck again using structure again
+str(data_fix)
+
+```
+##### We can see from the data summary, the nummeric data are already converted into numerical
+
+## EDA {.tabset}
+
+### Major trends of the data by date
+first, we would like to see the major trends of accident data by dates, we cann use command below
+```{r}
+#parsed the data to collect only the month
+time_data_date <- format(as.Date(data_fix$INCIDENT_DATE, "%m/%d/%Y","%m"))
+data_month <- month(time_data_date)
+monthly <- data.frame(table(data_month))
+#visualize the data
+ggplot(monthly,aes(x=data_month,y=Freq,group=1)) + geom_line(aes(x=data_month,y=Freq)) + geom_point() +
+  xlab("Month") + ylab("Number of accident") + ggtitle("Accident trend throughout 2016") +
+  theme(plot.title = element_text(hjust = 0.5)) + geom_smooth()
+```
+
+
+##### From the data above, overall the trends for the accident are decreasing throughout 2016, this means that the department achieve positive trends in terms of prevent the accident happen, but from the figure, accident are tends to increase during the holiday (New year holiday and summer holiday)
+
+
+
+### Distribution of years in officer
+After we see the trend, we would like too perform deeper analysis, we would like to see the officers that involved i the accident, we want to see the distribution first by using the boxplot below
+```{r}
+#visualize the boxplot
+boxplot(data_fix$OFFICER_YEARS_ON_FORCE,ylab='Officer Experience (Years)')
+```
+
+To get a broaden approach or a clearer perspective we would like to visualize on using histogram below
+
+```{r}
+summary(data_fix$OFFICER_YEARS_ON_FORCE)
+### we will make a histogram plots using this command
+hist(data_fix$OFFICER_YEARS_ON_FORCE,xlim=range(0,39),breaks =25
+     ,col='red',xlab='Officer Experience',ylab='Number of officer',
+     main="Distribution Accident Related to Officer's Experience")
+```
+
+is there any correlation between those? are more experienced officer are tends to not injured compared to experienced officer? we want to detect if there any correlation between officer experience and hospitalization, we can perform the correlation analysis below
+
+```{r}
+#do several one zero coding into categorical data
+data_fix$Nilai_Hospital<-ifelse(data_fix$OFFICER_HOSPITALIZATION=="Yes",1,0)
+data_fix$Nilai_Injury<-ifelse(data_fix$OFFICER_INJURY=="Yes",1,0)
+data_fix$Nilai_Arrest_Suspect<-ifelse(data_fix$SUBJECT_WAS_ARRESTED=="Yes",1,0)
+data_fix$Nilai_Injury_Suspect<-ifelse(data_fix$SUBJECT_INJURY=="Yes",1,0)
+data_korelasi <- round(cor(data_fix[, unlist(lapply(data_fix, is.numeric))]),digits = 2)
+#melt the data frame
+melted_korelasi <- melt(data_korelasi)
+
+#create correlation heatmap
+ggplot(data = melted_korelasi, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() +
+  geom_text(aes(Var2, Var1, label = value), size = 5) +
+  scale_fill_gradient2(low = "blue", high = "red",
+                       limit = c(-1,1), name="Correlation") +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        panel.background = element_blank())
+```
+
+
+##### we can see that junior officers tends to have incident while they are on duties, this means that more junior officer tends to have accident instead of senior officers. 
+
+
+
+
+
+
+
+
+### Accident Analysis By Time
+After we know about the officer that involved, we would like to see the time of accident happened and also want to see is there any time that have more accident than others
+
+```{r}
+### we need to extract the date from time column
+time_data_hour <- parse_date_time(data_fix$INCIDENT_TIME, "%H:%M:%S %p")
+### we found 10 null value, but it is not significant into analysis
+### we need to extract only hours in the data
+data_hour <- na.omit(hour(time_data_hour))
+### after that we can also plot our data using histogram plot
+fig <- plot_ly(x = data_hour, type = "histogram",nbinsx=70)%>%
+          layout(autosize=T,title='Distribution Relation Accident and Hours',
+           xaxis=list(title='Hours'),yaxis=list(title='Number of accident'))
+fig
+table(data_hour) ##### we can also look out quantitatively using table
+```
+
+
+##### From the figure we can see that the accident are tends to happening at night, with the peak are at 8 PM, this means that there are busy time when the officer are get higher chance of accident
+
+
+### Officer Gender
+to determine the recommendation to the stakeholders, we will see the distribution of gender in officer (we need to use log scale) we need different scale, because there is a huge gap in the data
+```{r}
+pd <-table(data_fix$OFFICER_GENDER)
+#visualising using bar plot the categorical data
+ggplot(data=data_fix,aes(x=OFFICER_GENDER)) + geom_bar(fill='blue')+
+  xlab('Officer Gender') + ylab('Number of officer') +
+  ggtitle("Number of Accident by gender") + ggtitle("Number of accident by gender")+
+  theme(plot.title = element_text(hjust = 0.5)) + scale_y_continuous(trans='log2') 
+```
+
+##### Male officer have a lot more accident compared to female officer
+
+
+
+### Officer Race
+After getting insight from the gender, it can be sharpen into the race of the officer, is there any specific race that involved in the accident
+
+```{r}
+#filtering the data using pipe
+data_race <- data.frame(data_fix[data_fix$OFFICER_RACE!='Other',] %>% group_by(OFFICER_GENDER) %>% count(OFFICER_RACE))
+data_sort <- data_race[order(data_race$OFFICER_GENDER,data_race$n),]
+
+#visualize the data using interactive plot such as plotly
+plot_ly(data = data_sort,x = data_race$OFFICER_GENDER,y = data_race$n,
+        color = data_race$OFFICER_RACE,
+        type = "bar"
+        ) %>% 
+        layout(barmode = "stack",xaxis=list(title='Gender'),
+               title='Officer Gender and race',
+               yaxis = list(title='Number of officers',type = "log")) 
+pd <- data.frame(count(data_fix,data_fix$OFFICER_RACE))
+ki <- pd %>% rename(race = data_fix.OFFICER_RACE)
+plot_ly(data = ki,labels=~ki$race,values =~ki$n,type ="pie") %>%
+  layout(title="Composition of accident by race",xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE))
+```
+
+##### White officer have a highest number of accident compared to others (almost half of data are white), this means that white officers are tends to have an accident compared to others
+
+### Officer Condition
+we also want to see  how many officer are injured and need hospitalization
+
+```{r}
+#visualize bar plot 
+ggplot(data=data_fix,aes(x=OFFICER_INJURY)) + geom_bar(fill='blue')+
+  xlab('Officer Condition') + ylab('Number of officer') +
+  ggtitle("Number of injured officer")+
+  theme(plot.title = element_text(hjust = 0.5)) + scale_y_continuous(trans='log2') 
+
+#visualize bar plot 
+ggplot(data=data_fix,aes(x=OFFICER_HOSPITALIZATION)) + geom_bar(fill='blue')+
+  xlab('Officer Condition') + ylab('Number of officer') +
+  ggtitle("Number of hospitalized officer")+
+  theme(plot.title = element_text(hjust = 0.5)) + scale_y_continuous(trans='log2') 
+```
+
+##### Most of officer that involved in accident are not injured and do not need any hospitalization, this means that the officer are succesfully handled the accident well and prevent more casualities.
+
+
+### Subject Gender and Race
+After we see the officer point of view, we would like to see in the data, subject gender and race
+
+```{r}
+#create the subset data using dplyr
+data_race_subject <- data.frame(filter(data_fix,SUBJECT_GENDER!="Unknown" &
+                                         SUBJECT_GENDER != "NULL" & 
+                                         SUBJECT_RACE!="NULL" & SUBJECT_RACE != "Other") %>%
+                              group_by(SUBJECT_GENDER) %>% count(SUBJECT_RACE))
+data_sort_subject <- data_race_subject[order(data_race_subject$SUBJECT_GENDER,data_race_subject$n,decreasing=FALSE),]
+row.names(data_sort_subject) <- NULL
+plot_ly(data = data_sort_subject,x = data_sort_subject$SUBJECT_GENDER,y = data_sort_subject$n,
+        color = data_sort_subject$SUBJECT_RACE,
+        type = "bar"
+) %>% 
+  layout(barmode = "stack",xaxis=list(title='Gender'),
+         title='Subject Gender and race',
+         yaxis = list(title='Number of officers')) 
+```
+
+
+##### Majority of accident are caused by Male Subject with black race, this means if the subject are from black race, then the accident tends to happen
+
+
+### Subject Condition
+we would like to see rather the subject are injured or not
+
+
+```{r}
+#create the subset data
+data_subject_injured <- data.frame(data_fix[data_fix$'SUBJECT_GENDER'!='NULL' & data_fix$'SUBJECT_GENDER'!='Unknown', ] %>% 
+                                     count(SUBJECT_INJURY))
+data_sub_injured_sort <- data_subject_injured[order(data_subject_injured$SUBJECT_INJURY,data_subject_injured$n),]
+
+#visualize the data using plotly
+plot_ly(data = data_subject_injured,labels=~data_subject_injured$SUBJECT_INJURY,values =~data_subject_injured$n,type ="pie") %>%
+  layout(title="Composition of accident by Subject injured",xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE))
+```
+
+
+##### Around 73.7% subject of the accident are not injured
+
+
+
+### Accident Location
+
+After that, we need to know that in terms of location,we would like to see by the location where the incident happen 
+
+```{r}
+#create the subset data 
+data_location <- data.frame(data_fix
+                                   %>% group_by(data_fix$DIVISION) %>%
+                                     count(data_fix$DIVISION))
+names(data_location)
+data_sort<- data_location[order(data_location$n),]
+#visualize the data
+plot_ly(data = data_sort,x = data_sort$data_fix.DIVISION,y = data_sort$n,
+        type = "bar") %>%
+  layout(title ='Number of Accident by Division',
+    xaxis = list(categoryorder = "total descending",title='Division'),yaxis=list(title='Number of Accident'))
+
+data_district <- data.frame(data_fix
+                            %>% group_by(data_fix$LOCATION_DISTRICT) %>%
+                              count(data_fix$LOCATION_DISTRICT))
+
+plot_ly(data = data_district,x = data_district$data_fix.LOCATION_DISTRICT,y = data_district$n,
+        type = "bar") %>%
+  layout(title ='Number of Accident by District',
+         xaxis = list(categoryorder = "total descending",title='District'),yaxis=list(title='Number of Accident'))
+
+```
+
+##### Here we can see that the D14 district and Central Location are the most high in term of accident happened
+
+
+
+
+
+
+### Accident Mapping
+
+we would like to visualize the maps data from latitude and also the longitude data
+
+```{r warning=FALSE}
+#create subset data for mapping
+data_lat <- as.double(data_fix$LOCATION_LATITUDE)
+data_long <- as.double(data_fix$LOCATION_LONGITUDE)
+data_lat_long <- data.frame(data_lat,data_long,data_fix$DIVISION,data_fix$OFFICER_ID ,data_fix$OFFICER_GENDER,data_fix$OFFICER_INJURY,data_fix$OFFICER_HOSPITALIZATION, data_fix$SUBJECT_WAS_ARRESTED,data_fix$SUBJECT_GENDER)
+data_filter_lat_long <- na.omit(data_lat_long)
+names(data_filter_lat_long)
+
+#create mapping data
+mapview(data_filter_lat_long, xcol = "data_long", ycol = "data_lat",zcol=c("data_fix.DIVISION","data_fix.DIVISION"),crs = 4269, grid = FALSE,map.types = "Stamen.Toner")
+
+summary(data_filter_lat_long)
+hist(data_lat,breaks=100,xlab ="Latitude",main ="Distribution from latitude") 
+abline(v=32.78,col='red')
+
+```
+
+```{r warning=FALSE}
+hist(data_long,breaks=100,xlab='Longitude',main ="Distribution from longitude")
+abline(v=-96.79,col='red')
+```
+
+
+##### We can know that the south part of the city, have more accident compared to north part of the city (based on the latlong distribution), and by the division, the most frequent accident happen on the central area. (the red line on the histogram is the median of the data)
+
+
+
+
+### Accident Reason
+
+we would like to know if there any majority reason for the report which causes the accident
+
+```{r}
+unique(data_fix$INCIDENT_REASON)
+data_reason <- data.frame(data_fix %>% group_by(INCIDENT_REASON) %>% count(INCIDENT_REASON)) 
+### we need to extract null values from here which can be done with this command
+data_reason <- data_reason[data_reason$INCIDENT_REASON != "NULL",]
+names(data_reason)
+plot_ly(data = data_reason,labels=~data_reason$INCIDENT_REASON,values =~data_reason$n,type ="pie") %>%
+  layout(title="Composition of accident by reason",xaxis = list(showgrid = FALSE, zeroline = FALSE, 
+                                                              showticklabels = TRUE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = TRUE))
+```
+
+
+##### Majority of accident are started with arrest, this means that accident are more likely to happen when the officers are performing arrest to the subject.
+
+## Conclusion & Recommendation
+
+The data was 2016 Dallas Accident on policing duties, there are several conclusion that can be taken from the data, first, the department are succesfully decrease the accident throughout 2016, second, there are several area that need to consider to prevent another accident in the future, third, there are several things that can be done by the department to prevent further accident to happened, this will be covered on the recommendation.
+
+From the data there are several recommendation that can be given to the stakeholders the recommendation are:
+
+* We can give More Training to the Junior to prevent accident happen
+* We can Pair the Junior Officer to the more experience officer to prevent the accident happen
+* The officer can be given the training while they are arresting suspect
+* We can distribute more officer that have more experienced on busy time (holiday period and during the night time (6pm- 6am ))
+* Distribution of the officer can be focused on central area, because it is most frequent accident happen on that area.
